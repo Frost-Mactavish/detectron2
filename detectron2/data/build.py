@@ -239,7 +239,11 @@ def get_eval_data(dataset_dicts, cfg):
     num_base_class = cfg.MODEL.ROI_HEADS.NUM_BASE_CLASSES
     num_novel_class = cfg.MODEL.ROI_HEADS.NUM_NOVEL_CLASSES
 
-    allowed_class = list(range(0, num_base_class+num_novel_class))
+    if cfg.MODEL.ROI_HEADS.TRAIN_ON_BASE_CLASSES:
+        allowed_class = list(range(0, num_base_class))
+    else:
+        allowed_class = list(range(0, num_base_class+num_novel_class))
+
     for entry in copy.copy(dataset_dicts):
         annos = entry["annotations"]
         for annotation in copy.copy(annos):
@@ -331,21 +335,27 @@ def get_detection_dataset_dicts(
         dataset_dicts = filter_images_with_few_keypoints(dataset_dicts, min_keypoints)
 
     if has_instances:
+        class_names = None
         try:
             class_names = MetadataCatalog.get(dataset_names[0]).thing_classes
             check_metadata_consistency("thing_classes", dataset_names)
             print_instances_class_histogram(dataset_dicts, class_names)
+        except AttributeError:
+            class_names = None
 
+        if test:
+            dataset_dicts = get_eval_data(dataset_dicts, cfg)
+        else:
             if cfg.FINETUNE.MIN_NUM_IMG_PER_CLASS > 0:
-                if not test:
-                    dataset_dicts = get_finetune_data(cfg, dataset_dicts)
-                else:
-                    dataset_dicts = get_eval_data(dataset_dicts, cfg)
+                dataset_dicts = get_finetune_data(cfg, dataset_dicts)
             else:
                 dataset_dicts = filter_images_with_class(dataset_dicts, cfg)
+
+        logger = logging.getLogger(__name__)
+        logger.info("Dataset pruned for IL task, {} images left.".format(len(dataset_dicts)))
+
+        if class_names is not None:
             print_instances_class_histogram(dataset_dicts, class_names)
-        except AttributeError:  # class names are not available for this dataset
-            pass
     return dataset_dicts
 
 
