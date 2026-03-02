@@ -1,0 +1,51 @@
+MODEL:
+  META_ARCHITECTURE: "GeneralizedRCNN"
+  BACKBONE:
+    NAME: "build_resnet_fpn_backbone"
+  RESNETS:
+    DEPTH: 50
+    OUT_FEATURES: ["res2", "res3", "res4", "res5"]
+  FPN:
+    IN_FEATURES: ["res2", "res3", "res4", "res5"]
+  ANCHOR_GENERATOR:
+    SIZES: [[32], [64], [128], [256], [512]]
+    ASPECT_RATIOS: [[0.5, 1.0, 2.0]]
+  RPN:
+    IN_FEATURES: ["p2", "p3", "p4", "p5", "p6"]
+    PRE_NMS_TOPK_TRAIN: 2000
+    PRE_NMS_TOPK_TEST: 1000
+    POST_NMS_TOPK_TRAIN: 2000
+    POST_NMS_TOPK_TEST: 1000
+  ROI_HEADS:
+    NAME: "StandardROIHeads"
+    IN_FEATURES: ["p2", "p3", "p4", "p5"]
+  ROI_BOX_HEAD:
+    NAME: "FastRCNNConvFCHead"
+    NUM_FC: 2
+    POOLER_RESOLUTION: 7
+    POOLER_SAMPLING_RATIO: 2
+    CLS_AGNOSTIC_BBOX_REG: True
+DATASETS:
+  TRAIN: ('dior_trainval',)
+  TEST: ('dior_test',)
+DATALOADER:
+  NUM_WORKERS: 8
+SOLVER:
+  WEIGHT_DECAY: 0.0001
+  GAMMA: 0.1
+  MOMENTUM: 0.9
+DISTILL:
+  BACKBONE: True
+  RPN: False
+  ROI_HEADS: True
+  ONLY_FG_ROIS: False
+  LOSS_WEIGHT: 0.2
+WG:
+  TRAIN_WARP_AT_ITR_NO: 20
+  WARP_LAYERS: ("module.roi_heads.box_head.fc2.weight",)
+  NUM_FEATURES_PER_CLASS: 100
+  NUM_IMAGES_PER_CLASS: 10
+  BATCH_SIZE: 2
+  USE_FEATURE_STORE: True
+SEED: 42
+VERSION: 2

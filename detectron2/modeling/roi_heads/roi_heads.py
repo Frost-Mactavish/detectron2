@@ -128,7 +128,7 @@ class ROIHeads(torch.nn.Module):
     It can have many variants, implemented as subclasses of this class.
     """
 
-    def __init__(self, cfg, input_shape: Dict[str, ShapeSpec]):
+    def __init__(self, cfg, input_shape: Dict[str, ShapeSpec], feature_store=None):
         super(ROIHeads, self).__init__()
 
         # fmt: off
@@ -155,6 +155,31 @@ class ROIHeads(torch.nn.Module):
 
         # Box2BoxTransform for bounding box regression
         self.box2box_transform = Box2BoxTransform(weights=cfg.MODEL.ROI_BOX_HEAD.BBOX_REG_WEIGHTS)
+
+        self.feature_store = feature_store
+        self.num_base_class = cfg.MODEL.ROI_HEADS.NUM_BASE_CLASSES
+        self.num_novel_class = cfg.MODEL.ROI_HEADS.NUM_NOVEL_CLASSES
+        self.num_class = cfg.MODEL.ROI_HEADS.NUM_CLASSES
+        if cfg.MODEL.ROI_HEADS.LEARN_INCREMENTALLY:
+            if cfg.MODEL.ROI_HEADS.TRAIN_ON_BASE_CLASSES:
+                self.invalid_class_range = list(
+                    range(self.num_base_class, self.num_class)
+                )
+            else:
+                self.invalid_class_range = list(
+                    range(self.num_base_class + self.num_novel_class, self.num_class)
+                )
+        else:
+            self.invalid_class_range = []
+        logging.getLogger(__name__).info(
+            "Invalid class range: " + str(self.invalid_class_range)
+        )
+
+        self.base_model = None
+        self.enable_roi_distillation = cfg.DISTILL.ROI_HEADS
+        self.distill_only_fg_roi = cfg.DISTILL.ONLY_FG_ROIS
+        self.dist_loss_weight = cfg.DISTILL.LOSS_WEIGHT
+        self.enable_distillation = cfg.DISTILL.ENABLE
 
     def _sample_proposals(self, matched_idxs, matched_labels, gt_classes):
         """
@@ -318,7 +343,7 @@ class Res5ROIHeads(ROIHeads):
     """
 
     def __init__(self, cfg, input_shape, feature_store=None):
-        super().__init__(cfg, input_shape)
+        super().__init__(cfg, input_shape, feature_store)
 
         assert len(self.in_features) == 1
 
@@ -338,9 +363,6 @@ class Res5ROIHeads(ROIHeads):
             pooler_type=pooler_type,
         )
 
-        self.feature_store = feature_store
-        self.enable_warp_grad = cfg.WG.ENABLE
-
         self.res5, out_channels = self._build_res5_block(cfg)
         self.box_predictor = FastRCNNOutputLayers(
             out_channels, self.num_classes, self.cls_agnostic_bbox_reg
@@ -351,24 +373,6 @@ class Res5ROIHeads(ROIHeads):
                 cfg,
                 ShapeSpec(channels=out_channels, width=pooler_resolution, height=pooler_resolution),
             )
-
-        self.num_base_class = cfg.MODEL.ROI_HEADS.NUM_BASE_CLASSES
-        self.num_novel_class = cfg.MODEL.ROI_HEADS.NUM_NOVEL_CLASSES
-        self.num_class = cfg.MODEL.ROI_HEADS.NUM_CLASSES
-        if cfg.MODEL.ROI_HEADS.LEARN_INCREMENTALLY:
-            if cfg.MODEL.ROI_HEADS.TRAIN_ON_BASE_CLASSES:
-                self.invalid_class_range = list(range(self.num_base_class, self.num_class))
-            else:
-                self.invalid_class_range = list(range(self.num_base_class + self.num_novel_class, self.num_class))
-        else:
-            self.invalid_class_range = []
-        logging.getLogger(__name__).info("Invalid class range: " + str(self.invalid_class_range))
-
-        self.base_model = None
-        self.enable_roi_distillation = cfg.DISTILL.ROI_HEADS
-        self.distill_only_fg_roi = cfg.DISTILL.ONLY_FG_ROIS
-        self.dist_loss_weight = cfg.DISTILL.LOSS_WEIGHT
-        self.enable_distillation = cfg.DISTILL.ENABLE
 
     def set_base_model(self, base_model):
         self.base_model = base_model
@@ -582,10 +586,66 @@ class StandardROIHeads(ROIHeads):
     """
 
     def __init__(self, cfg, input_shape, feature_store=None):
-        super(StandardROIHeads, self).__init__(cfg, input_shape)
+        super(StandardROIHeads, self).__init__(cfg, input_shape, feature_store)
         self._init_box_head(cfg)
         self._init_mask_head(cfg)
         self._init_keypoint_head(cfg)
+
+    def set_base_model(self, base_model):
+        self.base_model = base_model
+
+    def get_predictions_from_boxes(self, box_features):
+        box_features = self.box_head(box_features)
+        pred_class_logits, pred_proposal_deltas = self.box_predictor(box_features)
+        return pred_class_logits, pred_proposal_deltas
+
+    def get_warp_loss(self):
+        """
+        Steps:
+            1) Retrieve ROI features and proposals from feature_store
+            2) Compute Fast R-CNN losses
+        :return:
+        """
+        roi_features = []
+        proposals = []
+        for feats, props in self.feature_store.retrieve():
+            roi_features.append(feats)
+            proposals.append(props)
+
+        box_features = torch.cat(roi_features, dim=0)
+        proposals_with_gt = [Instances.cat(proposals, ignore_dim_change=True)]
+
+        pred_class_logits, pred_proposal_deltas = self.get_predictions_from_boxes(box_features)
+        outputs = FastRCNNOutputs(
+            self.box2box_transform,
+            pred_class_logits,
+            pred_proposal_deltas,
+            proposals_with_gt,
+            self.smooth_l1_beta,
+            self.invalid_class_range,
+            self.dist_loss_weight,
+            self.enable_distillation,
+        )
+        losses = outputs.losses()
+        losses["loss_cls_warp"] = losses.pop("loss_cls")
+        losses["loss_box_reg_warp"] = losses.pop("loss_box_reg")
+        return losses
+
+    def update_feature_store(self, features, proposals, targets):
+        """
+        Update feature_store using sampled proposals and ROI features from FPN box head.
+        """
+        proposals = self.label_and_sample_proposals(proposals, targets)
+        del targets
+
+        proposal_boxes = [x.proposal_boxes for x in proposals]
+        box_features = self.box_pooler([features[f] for f in self.in_features], proposal_boxes)
+
+        all_proposals = Instances.cat(proposals, ignore_dim_change=True)
+        for i in range(len(all_proposals)):
+            proposal = all_proposals[i]
+            class_id = proposal.gt_classes.item()
+            self.feature_store.add(((box_features[i].unsqueeze(0).clone().detach(), proposal),), (class_id,))
 
     def _init_box_head(self, cfg):
         # fmt: off
@@ -678,7 +738,31 @@ class StandardROIHeads(ROIHeads):
         features_list = [features[f] for f in self.in_features]
 
         if self.training:
-            losses = self._forward_box(features_list, proposals)
+            losses, boxes, pred_class_logits, pred_proposal_deltas = self._forward_box(features_list, proposals)
+
+            if self.base_model is not None and self.enable_roi_distillation:
+                if self.distill_only_fg_roi:
+                    proposals_fg = [p[p.gt_classes != self.num_classes] for p in proposals]
+                    proposal_boxes_fg = [x.proposal_boxes for x in proposals_fg]
+                    boxes_fg = self.box_pooler(features_list, proposal_boxes_fg)
+                    pred_class_logits, pred_proposal_deltas = self.get_predictions_from_boxes(
+                        boxes_fg
+                    )
+                    prev_pred_class_logits, prev_pred_proposal_deltas = self.base_model.roi_heads.\
+                        get_predictions_from_boxes(boxes_fg)
+                else:
+                    prev_pred_class_logits, prev_pred_proposal_deltas = self.base_model.roi_heads.\
+                        get_predictions_from_boxes(boxes)
+
+                roi_dist_loss = roi_head_loss(
+                    pred_class_logits[:, 0:self.num_base_class],
+                    pred_proposal_deltas,
+                    prev_pred_class_logits[:, 0:self.num_base_class],
+                    prev_pred_proposal_deltas,
+                    self.dist_loss_weight,
+                )
+                losses.update(roi_dist_loss)
+
             # During training the proposals used by the box head are
             # used by the mask, keypoint (and densepose) heads.
             losses.update(self._forward_mask(features_list, proposals))
@@ -732,8 +816,8 @@ class StandardROIHeads(ROIHeads):
             In training, a dict of losses.
             In inference, a list of `Instances`, the predicted instances.
         """
-        box_features = self.box_pooler(features, [x.proposal_boxes for x in proposals])
-        box_features = self.box_head(box_features)
+        roi_box_features = self.box_pooler(features, [x.proposal_boxes for x in proposals])
+        box_features = self.box_head(roi_box_features)
         pred_class_logits, pred_proposal_deltas = self.box_predictor(box_features)
         del box_features
 
@@ -744,9 +828,11 @@ class StandardROIHeads(ROIHeads):
             proposals,
             self.smooth_l1_beta,
             self.invalid_class_range,
+            self.dist_loss_weight,
+            self.enable_distillation,
         )
         if self.training:
-            return outputs.losses()
+            return outputs.losses(), roi_box_features, pred_class_logits, pred_proposal_deltas
         else:
             pred_instances, _ = outputs.inference(
                 self.test_score_thresh, self.test_nms_thresh, self.test_detections_per_img

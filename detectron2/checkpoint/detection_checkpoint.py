@@ -1,5 +1,8 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+import os
 import pickle
+import torch
+from typing import cast, IO
 from fvcore.common.checkpoint import Checkpointer
 from fvcore.common.file_io import PathManager
 
@@ -58,3 +61,20 @@ class DetectionCheckpointer(Checkpointer):
             checkpoint["model"] = model_state_dict
         # for non-caffe2 models, use standard ways to load it
         super()._load_model(checkpoint)
+
+    def save(self, name, **kwargs):
+        # checkpoint saves state_dict only
+        
+        if not self.save_dir or not self.save_to_disk:
+            return
+
+        state_dict = {k: v.cpu() for k, v in self.model.state_dict().items() if "base_model" not in k}
+        data = {"model": state_dict}
+
+        basename = f"{name}.pth"
+        save_file = os.path.join(self.save_dir, basename)
+        assert os.path.basename(save_file) == basename, basename
+        self.logger.info("Saving checkpoint to {}".format(save_file))
+        with self.path_manager.open(save_file, "wb") as f:
+            torch.save(data, cast(IO[bytes], f))
+        self.tag_last_checkpoint(basename)

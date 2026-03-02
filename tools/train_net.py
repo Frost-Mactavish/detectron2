@@ -19,6 +19,7 @@ import logging
 import os
 from collections import OrderedDict
 import torch
+import warnings
 
 import detectron2.utils.comm as comm
 from detectron2.checkpoint import DetectionCheckpointer
@@ -32,10 +33,14 @@ from detectron2.evaluation import (
     DatasetEvaluators,
     LVISEvaluator,
     PascalVOCDetectionEvaluator,
+    DIORDetectionEvaluator,
     SemSegEvaluator,
+    DOTADetectionEvaluator,
     verify_results,
 )
 from detectron2.modeling import GeneralizedRCNNWithTTA
+
+warnings.filterwarnings("ignore", category=UserWarning)
 
 
 class Trainer(DefaultTrainer):
@@ -78,7 +83,11 @@ class Trainer(DefaultTrainer):
             ), "CityscapesEvaluator currently do not work with multiple machines."
             return CityscapesEvaluator(dataset_name)
         elif evaluator_type == "pascal_voc":
-            return PascalVOCDetectionEvaluator(dataset_name)
+            return PascalVOCDetectionEvaluator(dataset_name, cfg)
+        elif evaluator_type == "dior":
+            return DIORDetectionEvaluator(dataset_name, cfg)
+        elif evaluator_type == "dota":
+            return DOTADetectionEvaluator(dataset_name, cfg)
         elif evaluator_type == "lvis":
             return LVISEvaluator(dataset_name, cfg, True, output_folder)
         if len(evaluator_list) == 0:
@@ -116,8 +125,11 @@ def setup(args):
     cfg = get_cfg()
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
-    # cfg.freeze()
     default_setup(cfg, args)
+
+    # cfg will be modified later in warp training
+    # cfg.freeze()
+
     return cfg
 
 
@@ -151,7 +163,6 @@ def main(args):
 
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
-    print("Command Line Args:", args)
     launch(
         main,
         args.num_gpus,

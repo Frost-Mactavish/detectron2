@@ -295,15 +295,15 @@ def align_and_update_state_dicts(model_state_dict, ckpt_state_dict, c2_conversio
             raise ValueError("Cannot match one checkpoint key to multiple keys in the model.")
 
         matched_keys[key_ckpt] = key_model
-        logger.info(
-            log_str_template.format(
-                key_model,
-                max_len_model,
-                original_keys[key_ckpt],
-                max_len_ckpt,
-                tuple(shape_in_model),
-            )
-        )
+        # logger.info(
+        #     log_str_template.format(
+        #         key_model,
+        #         max_len_model,
+        #         original_keys[key_ckpt],
+        #         max_len_ckpt,
+        #         tuple(shape_in_model),
+        #     )
+        # )
     matched_model_keys = matched_keys.values()
     matched_ckpt_keys = matched_keys.keys()
     # print warnings about unmatched keys on both side

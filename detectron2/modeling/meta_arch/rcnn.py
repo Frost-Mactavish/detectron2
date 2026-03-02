@@ -119,14 +119,14 @@ class GeneralizedRCNN(nn.Module):
                 proposals = [x["proposals"].to(self.device) for x in [image]]
 
             # proposals, _ = self.proposal_generator(img, features, gt_instances)
-            # self.roi_heads.update_feature_store(features, proposals, gt_instances)
-            _, detector_losses = self.roi_heads(img, features, proposals, gt_instances)
+            self.roi_heads.update_feature_store(features, proposals, gt_instances)
+            # _, detector_losses = self.roi_heads(img, features, proposals, gt_instances)
 
-        # warp_losses = self.roi_heads.get_warp_loss()
+        warp_losses = self.roi_heads.get_warp_loss()
         self.feature_store.reset()
 
         losses = {}
-        losses.update(detector_losses)
+        losses.update(warp_losses)
         return losses
 
     def forward(self, batched_inputs):

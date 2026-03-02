@@ -4,10 +4,10 @@ import logging
 import time
 from collections import OrderedDict
 from contextlib import contextmanager
+from tqdm import tqdm
 import torch
 
 from detectron2.utils.comm import is_main_process
-from detectron2.utils.logger import log_every_n_seconds
 
 
 class DatasetEvaluator:
@@ -112,7 +112,9 @@ def inference_on_dataset(model, data_loader, evaluator):
     start_time = time.perf_counter()
     total_compute_time = 0
     with inference_context(model), torch.no_grad():
-        for idx, inputs in enumerate(data_loader):
+        for idx, inputs in tqdm(
+            enumerate(data_loader), total=total, disable=not is_main_process()
+        ):
             if idx == num_warmup:
                 start_time = time.perf_counter()
                 total_compute_time = 0
@@ -124,19 +126,19 @@ def inference_on_dataset(model, data_loader, evaluator):
             total_compute_time += time.perf_counter() - start_compute_time
             evaluator.process(inputs, outputs)
 
-            if idx >= num_warmup * 2:
-                duration = time.perf_counter() - start_time
-                seconds_per_img = total_compute_time / (idx + 1 - num_warmup)
-                eta = datetime.timedelta(
-                    seconds=int(seconds_per_img * (total - num_warmup) - duration)
-                )
-                log_every_n_seconds(
-                    logging.INFO,
-                    "Inference done {}/{}. {:.4f} s / img. ETA={}".format(
-                        idx + 1, total, seconds_per_img, str(eta)
-                    ),
-                    n=5,
-                )
+            # if idx >= num_warmup * 2:
+            #     duration = time.perf_counter() - start_time
+            #     seconds_per_img = total_compute_time / (idx + 1 - num_warmup)
+            #     eta = datetime.timedelta(
+            #         seconds=int(seconds_per_img * (total - num_warmup) - duration)
+            #     )
+                # log_every_n_seconds(
+                #     logging.INFO,
+                #     "Inference done {}/{}. {:.4f} s / img. ETA={}".format(
+                #         idx + 1, total, seconds_per_img, str(eta)
+                #     ),
+                #     n=5,
+                # )
 
     # Measure the time only for this worker (before the synchronization barrier)
     total_time = time.perf_counter() - start_time

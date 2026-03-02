@@ -314,7 +314,7 @@ def _evaluate_predictions_on_lvis(lvis_gt, lvis_results, iou_type, class_names=N
     logger = logging.getLogger(__name__)
 
     if len(lvis_results) == 0:  # TODO: check if needed
-        logger.warn("No predictions from the model! Set scores to -1")
+        logger.warning("No predictions from the model! Set scores to -1")
         return {metric: -1 for metric in metrics}
 
     if iou_type == "segm":

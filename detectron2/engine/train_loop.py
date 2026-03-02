@@ -270,6 +270,9 @@ class SimpleTrainer(TrainerBase):
                 self._detect_anomaly(warp_loss, warp_loss_dict)
                 self.optimizer.zero_grad()
                 warp_loss.backward()
+                for name, param in self.model.named_parameters():
+                    if name not in self.cfg.WG.WARP_LAYERS and param.grad is not None:
+                        param.grad.fill_(0)
                 self.optimizer.step()
 
             self.cfg.WG.TRAIN_WARP = False
@@ -289,29 +292,17 @@ class SimpleTrainer(TrainerBase):
         task_loss = sum(loss for loss in loss_dict.values())
         self._detect_anomaly(task_loss, loss_dict)
 
-        if self.cfg.WG.ENABLE:
-            # Store the present data for future warp updates
-            self.update_image_store(data)
+        self.optimizer.zero_grad()
+        task_loss.backward()
 
-            # Update task parameters on the task loss
-            self.optimizer.zero_grad()
-            task_loss.backward()
+        if self.cfg.WG.ENABLE or self.cfg.FINETUNE.ENABLE:
             for name, param in self.model.named_parameters():
                 if name in self.cfg.WG.WARP_LAYERS:
-                        param.grad.fill_(0)
-            self.optimizer.step()
-        elif self.cfg.FINETUNE.ENABLE:
-            # Update only the task layers
-            self.optimizer.zero_grad()
-            task_loss.backward()
-            for name, param in self.model.named_parameters():
-                if name in self.cfg.WG.WARP_LAYERS:
-                        param.grad.fill_(0)
-            self.optimizer.step()
-        else:
-            self.optimizer.zero_grad()
-            task_loss.backward()
-            self.optimizer.step()
+                    param.grad.fill_(0)
+            if self.cfg.WG.ENABLE:
+                self.update_image_store(data)
+
+        self.optimizer.step()
 
     def _detect_anomaly(self, losses, loss_dict):
         if not torch.isfinite(losses).all():

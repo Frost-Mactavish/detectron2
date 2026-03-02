@@ -1,0 +1,13 @@
+_BASE_: "../DIOR/dior_base.yaml"
+MODEL:
+  RPN:
+    PRE_NMS_TOPK_TEST: 2000
+    POST_NMS_TOPK_TEST: 2000
+TEST:
+  DETECTIONS_PER_IMAGE: 2000
+INPUT:
+  MIN_SIZE_TRAIN: (1024,)
+  MIN_SIZE_TEST: 1024
+DATASETS:
+  TRAIN: ('dota_trainval',)
+  TEST: ('dota_test',)

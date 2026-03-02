@@ -55,7 +55,7 @@ def default_argument_parser():
         argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(description="Detectron2 Training")
-    parser.add_argument("--config-file", default="", metavar="FILE", help="path to config file")
+    parser.add_argument("--config-file", "-c", default="", metavar="FILE", help="path to config file")
     parser.add_argument(
         "--resume",
         action="store_true",
@@ -102,18 +102,18 @@ def default_setup(cfg, args):
     setup_logger(output_dir, distributed_rank=rank, name="fvcore")
     logger = setup_logger(output_dir, distributed_rank=rank)
 
-    logger.info("Rank of current process: {}. World size: {}".format(rank, comm.get_world_size()))
-    logger.info("Environment info:\n" + collect_env_info())
+    # logger.info("Rank of current process: {}. World size: {}".format(rank, comm.get_world_size()))
+    # logger.info("Environment info:\n" + collect_env_info())
 
     logger.info("Command line arguments: " + str(args))
-    if hasattr(args, "config_file") and args.config_file != "":
-        logger.info(
-            "Contents of args.config_file={}:\n{}".format(
-                args.config_file, PathManager.open(args.config_file, "r").read()
-            )
-        )
+    # if hasattr(args, "config_file") and args.config_file != "":
+    #     logger.info(
+    #         "Contents of args.config_file={}:\n{}".format(
+    #             args.config_file, PathManager.open(args.config_file, "r").read()
+    #         )
+    #     )
 
-    logger.info("Running with full config:\n{}".format(cfg))
+    # logger.info("Running with full config:\n{}".format(cfg))
     if comm.is_main_process() and output_dir:
         # Note: some of our scripts may expect the existence of
         # config.yaml in output directory
@@ -258,8 +258,7 @@ class DefaultTrainer(SimpleTrainer):
             logger = logging.getLogger(__name__)
             logger.info('Creating base model for distillation.')
             self.base_model = self.build_model(cfg)
-            for param in self.base_model.parameters():
-                param.requires_grad = False
+            self.base_model.eval()
             model.set_base_model(self.base_model)
 
         # For training, wrap with DDP. But don't need this for inference.
@@ -317,7 +316,7 @@ class DefaultTrainer(SimpleTrainer):
         if self.enable_distillation:
             logger = logging.getLogger(__name__)
             logger.info('Loading the weights to base model for distillation.')
-            self.base_model_checkpointer.resume_or_load(self.cfg.MODEL.BASE_WEIGHTS, resume=True)
+            self.base_model_checkpointer.resume_or_load(self.cfg.MODEL.WEIGHTS, resume=True)
 
     def build_hooks(self):
         """
@@ -363,7 +362,7 @@ class DefaultTrainer(SimpleTrainer):
 
         if comm.is_main_process():
             # run writers in the end, so that evaluation metrics are written
-            ret.append(hooks.PeriodicWriter(self.build_writers()))
+            ret.append(hooks.PeriodicWriter(self.build_writers(), period=200))
         return ret
 
     def build_writers(self):
@@ -419,7 +418,7 @@ class DefaultTrainer(SimpleTrainer):
         """
         model = build_model(cfg)
         logger = logging.getLogger(__name__)
-        logger.info("Model:\n{}".format(model))
+        # logger.info("Model:\n{}".format(model))
         return model
 
     @classmethod
@@ -508,7 +507,7 @@ class DefaultTrainer(SimpleTrainer):
                 try:
                     evaluator = cls.build_evaluator(cfg, dataset_name)
                 except NotImplementedError:
-                    logger.warn(
+                    logger.warning(
                         "No evaluator found. Use `DefaultTrainer.test(evaluators=)`, "
                         "or implement its `build_evaluator` method."
                     )

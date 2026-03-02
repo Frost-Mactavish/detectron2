@@ -6,6 +6,7 @@ checkpoints/
 log/
 tb_logger/
 .vscode
+cache/
 
 
 # Byte-compiled / optimized / DLL files

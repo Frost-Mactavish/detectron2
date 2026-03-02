@@ -208,9 +208,92 @@ def register_all_pascal_voc(root="datasets"):
         MetadataCatalog.get(name).evaluator_type = "pascal_voc"
 
 
-# Register them all under "./datasets"
+DIOR_CLASS_NAMES = (
+    "airplane",
+    "baseballfield",
+    "bridge",
+    "groundtrackfield",
+    "vehicle",
+    "ship",
+    "tenniscourt",
+    "airport",
+    "chimney",
+    "dam",
+    "basketballcourt",
+    "Expressway-Service-area",
+    "Expressway-toll-station",
+    "golffield",
+    "harbor",
+    "overpass",
+    "stadium",
+    "storagetank",
+    "trainstation",
+    "windmill",
+)
+
+
+DOTA_CLASS_NAMES = (
+    "plane",
+    "baseball-diamond",
+    "bridge",
+    "ground-track-field",
+    "small-vehicle",
+    "large-vehicle",
+    "ship",
+    "tennis-court",
+    "basketball-court",
+    "storage-tank",
+    "soccer-ball-field",
+    "roundabout",
+    "harbor",
+    "swimming-pool",
+    "helicopter",
+)
+
+
+def register_all_dior(root="datasets"):
+    dior_root =os.path.join(root, "DIOR")
+    splits = [
+        ("dior_trainval", "trainval"),
+        ("dior_test", "test"),
+    ]
+    for name, split in splits:
+        register_pascal_voc(
+            name,
+            dior_root,
+            split,
+            2012,
+            class_names=DIOR_CLASS_NAMES,
+        )
+        MetadataCatalog.get(name).evaluator_type = "dior"
+
+
+def register_all_dota(root="datasets"):
+    dota_root = os.path.join(root, "DOTA_xml")
+    splits = [
+        ("dota_trainval", "trainval"),
+        ("dota_test", "test"),
+    ]
+    for name, split in splits:
+        register_pascal_voc(
+            name,
+            dota_root,
+            split,
+            2012,
+            class_names=DOTA_CLASS_NAMES,
+        )
+        MetadataCatalog.get(name).evaluator_type = "dota"
+        MetadataCatalog.get(name).set(
+            dota_imagesetfile=os.path.join(dota_root, "test", "testset.txt"),
+            dota_annopath=os.path.join(dota_root, "test", "labelTxt", "{:s}.txt"),
+        )
+
+
+# Register builtin datasets (DIOR/DOTA use fixed path: /data/my_code/dataset)
 register_all_coco()
 register_all_lvis()
 register_all_cityscapes()
 register_all_pascal_voc()
+register_all_dior("/data/my_code/dataset")
+register_all_dota("/data/my_code/dataset")
 # register_all_pascal_voc('/home/joseph/workspace/detectron2/datasets')

@@ -11,7 +11,13 @@ def rpn_loss(pred_objectness_logits, pred_anchor_deltas, prev_pred_objectness_lo
 
 
 def backbone_loss(features, prev_features):
-    loss = feature_distillation(features['res4'], prev_features['res4'])
+    fpn_keys = ["p2", "p3", "p4", "p5"]
+    common_keys = [k for k in fpn_keys if k in features and k in prev_features]
+
+    loss = 0.0
+    for key in common_keys:
+        loss = loss + feature_distillation(features[key], prev_features[key])
+    loss = loss / len(common_keys)
     return {"loss_dist_backbone": loss}
 
 

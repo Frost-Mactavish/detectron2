@@ -16,6 +16,21 @@ from detectron2.utils import comm
 from .evaluator import DatasetEvaluator
 
 
+def _select_eval_class_names(class_names, cfg):
+    if cfg is None or not cfg.MODEL.ROI_HEADS.LEARN_INCREMENTALLY:
+        return class_names
+
+    num_base_class = cfg.MODEL.ROI_HEADS.NUM_BASE_CLASSES
+    num_novel_class = cfg.MODEL.ROI_HEADS.NUM_NOVEL_CLASSES
+
+    if cfg.MODEL.ROI_HEADS.TRAIN_ON_BASE_CLASSES:
+        max_eval_class = num_base_class
+    else:
+        max_eval_class = num_base_class + num_novel_class
+
+    return class_names[:max_eval_class]
+
+
 class PascalVOCDetectionEvaluator(DatasetEvaluator):
     """
     Evaluate Pascal VOC AP.
@@ -26,7 +41,7 @@ class PascalVOCDetectionEvaluator(DatasetEvaluator):
     the official API.
     """
 
-    def __init__(self, dataset_name):
+    def __init__(self, dataset_name, cfg=None):
         """
         Args:
             dataset_name (str): name of the dataset, e.g., "voc_2007_test"
@@ -35,7 +50,7 @@ class PascalVOCDetectionEvaluator(DatasetEvaluator):
         meta = MetadataCatalog.get(dataset_name)
         self._anno_file_template = os.path.join(meta.dirname, "Annotations", "{}.xml")
         self._image_set_path = os.path.join(meta.dirname, "ImageSets", "Main", meta.split + ".txt")
-        self._class_names = meta.thing_classes
+        self._class_names = _select_eval_class_names(meta.thing_classes, cfg)
         assert meta.year in [2007, 2012], meta.year
         self._is_2007 = meta.year == 2007
         self._cpu_device = torch.device("cpu")

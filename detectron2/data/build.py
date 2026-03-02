@@ -256,7 +256,7 @@ def get_finetune_data(cfg, dataset_dicts):
     num_class = cfg.MODEL.ROI_HEADS.NUM_CLASSES
     num_base_class = cfg.MODEL.ROI_HEADS.NUM_BASE_CLASSES
     num_novel_class = cfg.MODEL.ROI_HEADS.NUM_NOVEL_CLASSES
-    num_num_img_per_class = cfg.FINETUNE.MIN_NUM_IMG_PER_CLASS
+    min_num_img_per_class = cfg.FINETUNE.MIN_NUM_IMG_PER_CLASS
 
     # Randomly Shuffle the images
     random.shuffle(dataset_dicts)
@@ -287,7 +287,7 @@ def get_finetune_data(cfg, dataset_dicts):
                     dataset_dicts_filtered.append(image_data)
                     dataset_dicts.remove(image_data)
                     img_count += 1
-                if img_count >= num_num_img_per_class:
+                if img_count >= min_num_img_per_class:
                     break
 
     return dataset_dicts_filtered
