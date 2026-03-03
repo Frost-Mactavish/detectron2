@@ -49,7 +49,6 @@ class GeneralizedRCNN(nn.Module):
         self.normalizer = lambda x: (x - pixel_mean) / pixel_std
         self.to(self.device)
         self.enable_backbone_distillation = cfg.DISTILL.BACKBONE
-        self.enable_warp_grad = cfg.WG.ENABLE
         self.cfg = cfg
 
     def set_base_model(self, base_model):
@@ -155,7 +154,7 @@ class GeneralizedRCNN(nn.Module):
         if not self.training:
             return self.inference(batched_inputs)
 
-        if self.cfg.WG.TRAIN_WARP and self.cfg.WG.USE_FEATURE_STORE:
+        if self.cfg.WG.TRAIN_WARP:
             return self.get_warp_loss(batched_inputs)
 
         images = self.preprocess_image(batched_inputs)

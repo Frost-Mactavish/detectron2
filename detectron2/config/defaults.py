@@ -624,7 +624,6 @@ _C.WG.WARP_LAYERS = ("module.roi_heads.res5.0.conv2.weight", "module.roi_heads.r
 _C.WG.NUM_FEATURES_PER_CLASS = 100
 _C.WG.NUM_IMAGES_PER_CLASS = 10
 _C.WG.BATCH_SIZE = 2
-_C.WG.USE_FEATURE_STORE = True
 _C.WG.IMAGE_STORE_LOC = ''
 
 # ---------------------------------------------------------------------------- #

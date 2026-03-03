@@ -17,6 +17,7 @@ You may want to write your own script with your datasets and other customization
 
 import logging
 import os
+import shutil
 from collections import OrderedDict
 import torch
 import warnings
@@ -126,6 +127,29 @@ def setup(args):
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
     default_setup(cfg, args)
+
+    # modify cfg for multi-step incremental training
+    if args.step >= 1:
+        task = args.config_file.split("/")[-2]
+        root = f"log/{args.dataset}/{task}"
+        cls_per_step = cfg.ROI_HEADS.NUM_NOVEL_CLASSES
+        dst_img_store = f"{root}/image_store.pth"
+
+        basename = os.path.basename(args.config_file)
+        if basename == "target.yaml":
+            if args.step == 1:
+                shutil.copy(cfg.WG.IMAGE_STORE_LOC, dst_img_store)
+            else:
+                cfg.MODEL.WEIGHTS = f"{root}/STEP{args.step-1}/FT/model_final.pth"
+            cfg.OUTPUT_DIR = f"{root}/STEP{args.step}/INC"
+        elif basename == "ft.yaml":
+            if args.step > 1:
+                cfg.MODEL.WEIGHTS = f"{root}/STEP{args.step}/INC/model_final.pth"
+            cfg.OUTPUT_DIR = f"{root}/STEP{args.step}/FT"
+
+        cfg.ROI_HEADS.NUM_BASE_CLASSES = cls_per_step * args.step
+        cfg.ROI_HEADS.NUM_CLASSES = cfg.ROI_HEADS.NUM_BASE_CLASSES + cls_per_step
+        cfg.WG.IMAGE_STORE_LOC = dst_img_store
 
     # cfg will be modified later in warp training
     # cfg.freeze()

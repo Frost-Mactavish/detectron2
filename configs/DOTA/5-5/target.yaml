@@ -1,20 +1,20 @@
 _BASE_: "../dota_base.yaml"
 MODEL:
-  WEIGHTS: "log/DOTA/10-5/STEP0/model_final.pth"
+  WEIGHTS: "log/DOTA/5-10/STEP0/model_final.pth"
   ROI_HEADS:
     NUM_CLASSES: 15
-    NUM_BASE_CLASSES: 10
+    NUM_BASE_CLASSES: 5
     NUM_NOVEL_CLASSES: 5
     LEARN_INCREMENTALLY: True
     TRAIN_ON_BASE_CLASSES: False
 SOLVER:
-  STEPS: (4598,)
-  MAX_ITER: 5497
+  STEPS: (8472,)
+  MAX_ITER: 10147
   IMS_PER_BATCH: 4
   LR_SCHEDULER_NAME: WarmupMultiStepLR
 DISTILL:
   ENABLE: True
 WG:
   ENABLE: True
-  IMAGE_STORE_LOC: "log/DOTA/10-5/img_store.pth"
-OUTPUT_DIR: "log/DOTA/10-5/STEP1/INC"
+  IMAGE_STORE_LOC: "log/DOTA/5-10/img_store.pth"
+OUTPUT_DIR: "log/DOTA/5-5/STEP1/INC"

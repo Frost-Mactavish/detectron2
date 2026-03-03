@@ -1,10 +1,10 @@
-_BASE_: "../dior_base.yaml"
+_BASE_: "../dota_base.yaml"
 MODEL:
-  WEIGHTS: "log/DIOR/10-10/STEP1/INC/model_final.pth"
+  WEIGHTS: "log/DOTA/5-5/STEP1/INC/model_final.pth"
   ROI_HEADS:
-    NUM_CLASSES: 20
-    NUM_BASE_CLASSES: 10
-    NUM_NOVEL_CLASSES: 10
+    NUM_CLASSES: 15
+    NUM_BASE_CLASSES: 5
+    NUM_NOVEL_CLASSES: 5
     LEARN_INCREMENTALLY: False
     TRAIN_ON_BASE_CLASSES: False
 SOLVER:
@@ -15,8 +15,8 @@ DISTILL:
   ENABLE: False
 WG:
   ENABLE: False
-  IMAGE_STORE_LOC: "log/DIOR/10-10/img_store.pth"
+  IMAGE_STORE_LOC: "log/DOTA/5-10/img_store.pth"
 FINETUNE:
   MIN_NUM_IMG_PER_CLASS: 10
   BATCH_SIZE: 2
-OUTPUT_DIR: "log/DIOR/10-10/STEP1/FT"
+OUTPUT_DIR: "log/DOTA/5-5/STEP1/FT"

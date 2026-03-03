@@ -173,6 +173,9 @@ class TrainerBase:
             if self.image_store is not None:
                 with PathManager.open(file_path, "wb") as f:
                     torch.save(self.image_store, f)
+                    logger = logging.getLogger(__name__)
+                    logger.info("Saved ImageStore to " + file_path)
+                    logger.info(self.image_store)
         for h in self._hooks:
             h.after_train()
 
@@ -241,39 +244,20 @@ class SimpleTrainer(TrainerBase):
         assert self.model.training, "[SimpleTrainer] model was changed to eval mode!"
 
         if (self.iter + 1) % self.cfg.WG.TRAIN_WARP_AT_ITR_NO == 0 and self.cfg.WG.ENABLE:
-            verbose = False
-            if verbose:
-                logger = logging.getLogger(__name__)
-                logger.info('Image store contains %d items. They are %s' % (len(self.image_store), self.image_store))
 
             self.cfg.WG.TRAIN_WARP = True
 
-            self.optimizer.zero_grad()
             images = self.image_store.retrieve()
+            warp_loss_dict = self.model(images)
+            warp_loss = sum(loss for loss in warp_loss_dict.values())
+            self._detect_anomaly(warp_loss, warp_loss_dict)
 
-            if not self.cfg.WG.USE_FEATURE_STORE:
-                for i in range(0, len(images), self.cfg.WG.BATCH_SIZE):
-                    batched_images = images[i:i+self.cfg.WG.BATCH_SIZE]
-                    loss_dict = self.model(batched_images)
-                    cls_wrp = loss_dict.pop('loss_cls')
-                    reg_wrp = loss_dict.pop('loss_box_reg')
-                    warp_loss = cls_wrp + reg_wrp
-                    self.optimizer.zero_grad()
-                    warp_loss.backward()
-                    for name, param in self.model.named_parameters():
-                        if name not in self.cfg.WG.WARP_LAYERS and param.grad is not None:
-                            param.grad.fill_(0)
-                    self.optimizer.step()
-            else:
-                warp_loss_dict = self.model(images)
-                warp_loss = sum(loss for loss in warp_loss_dict.values())
-                self._detect_anomaly(warp_loss, warp_loss_dict)
-                self.optimizer.zero_grad()
-                warp_loss.backward()
-                for name, param in self.model.named_parameters():
-                    if name not in self.cfg.WG.WARP_LAYERS and param.grad is not None:
-                        param.grad.fill_(0)
-                self.optimizer.step()
+            self.optimizer.zero_grad()
+            warp_loss.backward()
+            for name, param in self.model.named_parameters():
+                if name not in self.cfg.WG.WARP_LAYERS and param.grad is not None:
+                    param.grad.fill_(0)
+            self.optimizer.step()
 
             self.cfg.WG.TRAIN_WARP = False
 
@@ -294,14 +278,12 @@ class SimpleTrainer(TrainerBase):
 
         self.optimizer.zero_grad()
         task_loss.backward()
-
         if self.cfg.WG.ENABLE or self.cfg.FINETUNE.ENABLE:
             for name, param in self.model.named_parameters():
                 if name in self.cfg.WG.WARP_LAYERS:
                     param.grad.fill_(0)
             if self.cfg.WG.ENABLE:
                 self.update_image_store(data)
-
         self.optimizer.step()
 
     def _detect_anomaly(self, losses, loss_dict):

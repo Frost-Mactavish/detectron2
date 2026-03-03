@@ -56,6 +56,8 @@ def default_argument_parser():
     """
     parser = argparse.ArgumentParser(description="Detectron2 Training")
     parser.add_argument("--config-file", "-c", default="", metavar="FILE", help="path to config file")
+    parser.add_argument("--dataset", "-d", default="")
+    parser.add_argument("--step", "-s", default=0, type=int)
     parser.add_argument(
         "--resume",
         action="store_true",
@@ -293,6 +295,9 @@ class DefaultTrainer(SimpleTrainer):
             if os.path.exists(file_path):
                 with PathManager.open(file_path, "rb") as f:
                     self.image_store = torch.load(f)
+                    logger = logging.getLogger(__name__)
+                    logger.info("Loaded ImageStore from " + file_path)
+                    logger.info(self.image_store)
             else:
                 self.image_store = Store(self.cfg.MODEL.ROI_HEADS.NUM_CLASSES, self.cfg.WG.NUM_IMAGES_PER_CLASS)
 
