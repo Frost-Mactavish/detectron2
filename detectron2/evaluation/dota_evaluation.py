@@ -94,5 +94,9 @@ class DOTADetectionEvaluator(DatasetEvaluator):
 
         mean_ap = float(ap_list.mean() * 100.0) if len(ap_list) > 0 else 0.0
         ret = OrderedDict()
-        ret["bbox"] = {"AP": mean_ap, "AP50": mean_ap}
+        ret["bbox"] = {
+            "AP": mean_ap,
+            "AP50": mean_ap,
+            "AP-LIST": [float(x) * 100.0 for x in ap_list.tolist()],
+        }
         return ret

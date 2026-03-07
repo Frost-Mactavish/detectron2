@@ -128,11 +128,12 @@ def setup(args):
     cfg.merge_from_list(args.opts)
     default_setup(cfg, args)
 
+    task = args.config_file.split("/")[-2]
+    cfg.TASK = task
     # modify cfg for multi-step incremental training
-    if args.step >= 1:
-        task = args.config_file.split("/")[-2]
+    if args.step >= 1 and not args.eval_only:
         root = f"log/{args.dataset}/{task}"
-        cls_per_step = cfg.ROI_HEADS.NUM_NOVEL_CLASSES
+        cls_per_step = cfg.MODEL.ROI_HEADS.NUM_NOVEL_CLASSES
         dst_img_store = f"{root}/image_store.pth"
 
         basename = os.path.basename(args.config_file)
@@ -147,14 +148,56 @@ def setup(args):
                 cfg.MODEL.WEIGHTS = f"{root}/STEP{args.step}/INC/model_final.pth"
             cfg.OUTPUT_DIR = f"{root}/STEP{args.step}/FT"
 
-        cfg.ROI_HEADS.NUM_BASE_CLASSES = cls_per_step * args.step
-        cfg.ROI_HEADS.NUM_CLASSES = cfg.ROI_HEADS.NUM_BASE_CLASSES + cls_per_step
+        cfg.MODEL.ROI_HEADS.NUM_BASE_CLASSES += cls_per_step * (args.step - 1)
+        cfg.MODEL.ROI_HEADS.NUM_CLASSES = cfg.MODEL.ROI_HEADS.NUM_BASE_CLASSES + cls_per_step
         cfg.WG.IMAGE_STORE_LOC = dst_img_store
 
     # cfg will be modified later in warp training
     # cfg.freeze()
 
     return cfg
+
+
+def append_old_new_map_log(args, cfg, res):
+    def _to_percent(value):
+        value = float(value)
+        return value * 100.0 if value <= 1.0 else value
+
+    num_old_classes = int(cfg.TASK.split("-")[0])
+    bbox_result = None
+    if isinstance(res, dict) and "bbox" in res:
+        bbox_result = res.get("bbox", {})
+    elif isinstance(res, dict):
+        for dataset_result in res.values():
+            if isinstance(dataset_result, dict) and "bbox" in dataset_result:
+                bbox_result = dataset_result.get("bbox", {})
+                break
+
+    ap_list = []
+    if isinstance(bbox_result, dict):
+        ap_list = bbox_result.get("AP-LIST", bbox_result.get("AP_LIST", []))
+
+    if len(ap_list) >= num_old_classes and num_old_classes > 0:
+        old_list = ap_list[:num_old_classes]
+        new_list = ap_list[num_old_classes:]
+        map_old = sum(old_list) / len(old_list) if len(old_list) > 0 else 0.0
+        map_new = sum(new_list) / len(new_list) if len(new_list) > 0 else 0.0
+        map_all = float(bbox_result.get("AP50", bbox_result.get("AP", 0.0)))
+        map_old = _to_percent(map_old)
+        map_new = _to_percent(map_new)
+        map_all = _to_percent(map_all)
+
+        os.makedirs("log", exist_ok=True)
+        with open(os.path.join("log", "result.txt"), "a") as f:
+            f.write(f"{args.dataset} Task {cfg.TASK} Step {args.step}\n")
+            f.write(f"mAP Old: {map_old:.1f}, mAP New: {map_new:.1f}, mAP: {map_all:.1f}\n\n")
+    else:
+        logging.getLogger(__name__).warning(
+            "Skip old/new mAP logging because AP_LIST is missing or shorter than num_old_classes. "
+            "len(AP_LIST/AP-LIST)=%s, num_old_classes=%s",
+            len(ap_list),
+            num_old_classes,
+        )
 
 
 def main(args):
@@ -168,6 +211,7 @@ def main(args):
         res = Trainer.test(cfg, model)
         if comm.is_main_process():
             verify_results(cfg, res)
+            append_old_new_map_log(args, cfg, res)
         if cfg.TEST.AUG.ENABLED:
             res.update(Trainer.test_with_TTA(cfg, model))
         return res

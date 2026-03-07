@@ -215,5 +215,5 @@ class DIORDetectionEvaluator(DatasetEvaluator):
                 f.write("\n".join(print_msg))
 
         ret = OrderedDict()
-        ret["bbox"] = {"AP50": mAP50}
+        ret["bbox"] = {"AP50": mAP50, "AP-LIST": [float(x) for x in ap50_list]}
         return ret
